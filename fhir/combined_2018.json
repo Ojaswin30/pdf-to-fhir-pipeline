@@ -1,0 +1,162 @@
+{
+  "patient": {
+    "id": "2018",
+    "name": "Date:",
+    "date": "1900-01-01",
+    "location": "Ericsson, Jonathan"
+  },
+  "documents": [
+    {
+      "id": "145070d3-6578-493e-a6b5-7f87ce20d775",
+      "meta": {
+        "lastUpdated": "2025-06-30T17:33:39.776684+00:00",
+        "profile": [
+          "http://hl7.org/fhir/StructureDefinition/DocumentReference"
+        ],
+        "versionId": "1"
+      },
+      "content": [
+        {
+          "attachment": {
+            "contentType": "text/plain",
+            "data": "RXJpY3Nzb24sIEpvbmF0aGFuCjIwMTgtMDMtMDkKVmlzaXRpbmcgVGVhbSBJbmp1cnkgUmVwb3J0ClBsYXllcidzIE5hbWU6CkRhdGU6CkZpbmFsaXplZDoKTG9jYXRpb246CkVyaWNzc29uLCBKb25hdGhhbgoyMDE4LTAzLTA5CkNvbHVtYnVzClllcwpSZWxhdGVkIEV2ZW50cy9QUE1FL0V4aXQgRXhhbWluYXRpb25zOgoyMDE4LTAzLTA5IEVTVCBSIFRoaWdoIGxhY2VyYXRpb24KSGlzdG9yeToKUmlnaHQgbWVkaWFsIHRoaWdoIGxhY2VyYXRpb24gZnJvbSBhIHNrYXRlClBoeXNpY2FsIEV4YW1pbmF0aW9uOgo3IGNtIHggMiBjbSB4IDEgY20gZGVlcCB3b3VuZC4gIE1pbmltYWwgYmxlZWRpbmcsIG5vIGNvbnRhbWluYXRpb24KRGlhZ25vc2lzOgpSaWdodCB0aGlnaCBsYWNlcmF0aW9uClJlY29tbWVuZGF0aW9uczo="
+          }
+        }
+      ],
+      "date": "2025-06-30T17:33:39.775447+00:00",
+      "status": "current",
+      "subject": {
+        "reference": "Patient/9d3be33f-29e6-4a80-8b84-97f8de4cdb91"
+      },
+      "type": {
+        "coding": [
+          {
+            "code": "11506-3",
+            "display": "Progress note",
+            "system": "http://loinc.org"
+          }
+        ]
+      },
+      "resourceType": "DocumentReference"
+    },
+    {
+      "id": "4fe6d652-1f3a-47d7-b937-1169da93ac68",
+      "meta": {
+        "lastUpdated": "2025-06-30T17:33:39.988595+00:00",
+        "profile": [
+          "http://hl7.org/fhir/StructureDefinition/DocumentReference"
+        ],
+        "versionId": "1"
+      },
+      "content": [
+        {
+          "attachment": {
+            "contentType": "text/plain",
+            "data": "UmlnaHQgdGhpZ2ggbGFjZXJhdGlvbgpSZWNvbW1lbmRhdGlvbnM6CkkmRCwgY2xvc3VyZSBvZiB3b3VuZC4gIFRoZSB3b3VuZCB3YXMgbGluZWFyIGFuZCBjbGVhbiwgbWluaW1hbCBibGVlZGluZyBhbmQgbm8gaW5qdXJ5IHRvIHRoZSBzYXBoZW5vdXMgdmVpbi4gIFRoZSB3b3VuZCAKd2FzIHN0ZXJpbGl6ZWQgYW5kIDEwIG1sIG9mIDElIGxpZG9jYWluZSB3YXMgdXNlZCBmb3IgYW5lc3RoZXNpYS4gIEkgY29waW91c2x5IGlycmlnYXRlZCB0aGUgd291bmQgYW5kIGNsb3NlZCBpdCBpbiBsYXllcnMgd2l0aCAKMy0wIHZpY3J5bCBhbmQgNC0wIG55bG9uIGZvciB0aGUgc2tpbi4gIEEgc3RlcmlsZSBiYW5kYWdlIHdhcyBwbGFjZWQuCkF0dGFjaG1lbnRzClBhZ2UgMSBvZiAx"
+          }
+        }
+      ],
+      "date": "2025-06-30T17:33:39.988595+00:00",
+      "status": "current",
+      "subject": {
+        "reference": "Patient/7212a02a-4893-4d76-ab36-c9512f3eb385"
+      },
+      "type": {
+        "coding": [
+          {
+            "code": "11506-3",
+            "display": "Progress note",
+            "system": "http://loinc.org"
+          }
+        ]
+      },
+      "resourceType": "DocumentReference"
+    }
+  ],
+  "conditions": [
+    {
+      "id": "11257455-987b-459b-b8af-d95ac2da42b3",
+      "meta": {
+        "lastUpdated": "2025-06-30T17:33:39.784472+00:00",
+        "profile": [
+          "http://hl7.org/fhir/StructureDefinition/Condition"
+        ],
+        "versionId": "1"
+      },
+      "clinicalStatus": {
+        "coding": [
+          {
+            "code": "active",
+            "display": "Active",
+            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+          }
+        ]
+      },
+      "code": {
+        "coding": [
+          {
+            "display": "Right thigh laceration",
+            "system": "http://snomed.info/sct"
+          }
+        ],
+        "text": "Diagnosis: Right thigh laceration\nHistory: Right medial thigh laceration from a skate\nPhysical Examination:\n7 cm x 2 cm x 1 cm deep wound.  Minimal bleeding, no contamination\nRecommendations: None\nPhysical Exam: 7 cm x 2 cm x 1 cm deep wound.  Minimal bleeding, no contamination"
+      },
+      "recordedDate": "2025-06-30T17:33:39.784472+00:00",
+      "subject": {
+        "reference": "Patient/9d3be33f-29e6-4a80-8b84-97f8de4cdb91"
+      },
+      "verificationStatus": {
+        "coding": [
+          {
+            "code": "confirmed",
+            "display": "Confirmed",
+            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+          }
+        ]
+      },
+      "resourceType": "Condition"
+    },
+    {
+      "id": "42ad1ae4-8fba-4c7a-82c7-bc92a1e4e585",
+      "meta": {
+        "lastUpdated": "2025-06-30T17:33:39.997695+00:00",
+        "profile": [
+          "http://hl7.org/fhir/StructureDefinition/Condition"
+        ],
+        "versionId": "1"
+      },
+      "clinicalStatus": {
+        "coding": [
+          {
+            "code": "active",
+            "display": "Active",
+            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+          }
+        ]
+      },
+      "code": {
+        "coding": [
+          {
+            "display": "Right thigh laceration",
+            "system": "http://snomed.info/sct"
+          }
+        ],
+        "text": "Diagnosis: Right thigh laceration\nHistory: Right medial thigh laceration from a skate\nPhysical Examination:\n7 cm x 2 cm x 1 cm deep wound.  Minimal bleeding, no contamination\nRecommendations: None\nPhysical Exam: 7 cm x 2 cm x 1 cm deep wound.  Minimal bleeding, no contamination"
+      },
+      "recordedDate": "2025-06-30T17:33:39.997695+00:00",
+      "subject": {
+        "reference": "Patient/7212a02a-4893-4d76-ab36-c9512f3eb385"
+      },
+      "verificationStatus": {
+        "coding": [
+          {
+            "code": "confirmed",
+            "display": "Confirmed",
+            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+          }
+        ]
+      },
+      "resourceType": "Condition"
+    }
+  ]
+}
