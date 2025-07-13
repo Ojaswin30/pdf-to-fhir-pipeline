@@ -171,7 +171,6 @@ This project is licensed under the MIT License. See the `LICENSE` file for detai
 
 For questions, issues, or contributions:
 - Open an issue on GitHub
-- Contact: [your-email@example.com]
 
 ---
 
