@@ -1,0 +1,19 @@
+# Core pipeline
+langchain
+langchain-community
+langchain-together
+langchain-huggingface
+faiss-cpu
+PyMuPDF
+ocrmypdf
+neo4j
+tenacity
+pydantic
+sentence-transformers
+ 
+# Web app
+flask
+werkzeug
+ 
+# Config / secrets
+python-dotenv

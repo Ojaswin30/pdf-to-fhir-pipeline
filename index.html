@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GraphRAG Medical Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --surface: #111720;
+    --surface2: #161e2a;
+    --border: #1e2d3d;
+    --accent: #00d9ff;
+    --accent2: #7c3aed;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --err: #ef4444;
+    --text: #d4dde8;
+    --muted: #4a6278;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .logo span { color: var(--muted); }
+  .header-status {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--ok);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+  }
+
+  /* ── Layout ── */
+  .workspace {
+    display: grid;
+    grid-template-columns: 280px 1fr 360px;
+    height: calc(100vh - 52px);
+    overflow: hidden;
+  }
+
+  .panel {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel:last-child { border-right: none; }
+
+  .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  }
+  .panel-body::-webkit-scrollbar { width: 4px; }
+  .panel-body::-webkit-scrollbar-track { background: transparent; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── Upload Zone ── */
+  .upload-zone {
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 20px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 16px;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(0,217,255,0.04);
+  }
+  .upload-zone input { display: none; }
+  .upload-icon {
+    font-size: 24px;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .upload-zone p {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .upload-zone strong { color: var(--accent); }
+
+  /* ── Patient List ── */
+  .patient-item {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .patient-item:hover { border-color: var(--accent); background: rgba(0,217,255,0.03); }
+  .patient-item.active { border-color: var(--accent); background: rgba(0,217,255,0.07); }
+  .patient-id {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 3px;
+  }
+  .patient-files {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover { background: #00b8d9; }
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger {
+    background: transparent;
+    color: var(--err);
+    border-color: var(--err);
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-block { width: 100%; justify-content: center; margin-bottom: 8px; }
+
+  /* ── Center Panel: Log Terminal ── */
+  .center-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .terminal {
+    flex: 1;
+    background: #06090e;
+    overflow-y: auto;
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .terminal::-webkit-scrollbar { width: 4px; }
+  .terminal::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .log-line { display: block; white-space: pre-wrap; word-break: break-word; }
+  .log-line.info  { color: #7dd3fc; }
+  .log-line.debug { color: var(--muted); }
+  .log-line.warn  { color: var(--warn); }
+  .log-line.error { color: var(--err); }
+  .log-line.ok    { color: var(--ok); }
+  .log-line.sep   { color: #1e3a4a; }
+  .log-line.done  { color: var(--ok); font-weight: 600; }
+
+  .terminal-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    flex-direction: column;
+    gap: 8px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .terminal-placeholder .big { font-size: 32px; }
+
+  .terminal-toolbar {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .process-controls { display: flex; align-items: center; gap: 8px; flex: 1; }
+  .patient-select-wrap { flex: 1; }
+  .patient-select-wrap select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+  }
+  .patient-select-wrap select:focus { border-color: var(--accent); }
+
+  /* ── Right Panel: Query ── */
+  .query-section { display: flex; flex-direction: column; gap: 12px; }
+
+  .field-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .input-field {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .input-field:focus { border-color: var(--accent); }
+
+  textarea.input-field {
+    resize: vertical;
+    min-height: 80px;
+    font-family: var(--sans);
+  }
+
+  .answer-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    min-height: 120px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .answer-box.loading {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* ── FHIR viewer ── */
+  .fhir-list { display: flex; flex-direction: column; gap: 6px; }
+  .fhir-item {
+    padding: 8px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .fhir-item .pid { color: var(--accent); }
+  .fhir-item a {
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .fhir-item a:hover { color: var(--accent); }
+
+  /* ── Spinner ── */
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    z-index: 999;
+    display: none;
+    max-width: 300px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  #toast.show { display: block; animation: slideIn 0.2s ease; }
+  #toast.ok  { border-color: var(--ok); color: var(--ok); }
+  #toast.err { border-color: var(--err); color: var(--err); }
+  @keyframes slideIn {
+    from { transform: translateY(8px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+  }
+
+  .tag {
+    display: inline-block;
+    background: rgba(0,217,255,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(0,217,255,0.2);
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 1px 6px;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Graph<span>RAG</span> // Medical Pipeline</div>
+  <div class="header-status">
+    <div class="dot"></div>
+    <span id="status-text">ready</span>
+  </div>
+</header>
+
+<div class="workspace">
+
+  <!-- LEFT: PDF management -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>📂 PDFs / Patients</span>
+      <span id="patient-count" class="tag">0</span>
+    </div>
+    <div class="panel-body">
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+        <label>
+          <input type="file" id="file-input" accept=".pdf" multiple>
+          <span class="upload-icon">⬆</span>
+          <p>Drop PDFs here or <strong>click to upload</strong><br>Multiple files supported</p>
+        </label>
+      </div>
+
+      <div id="patient-list">
+        <div class="empty-state">No PDFs found.<br>Upload files above to begin.</div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="field-label">FHIR Outputs</div>
+      <div id="fhir-list" class="fhir-list">
+        <div class="empty-state" style="padding:12px 0">No outputs yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: Processing terminal -->
+  <div class="panel center-panel">
+    <div class="terminal-toolbar">
+      <div class="process-controls">
+        <div class="patient-select-wrap">
+          <select id="process-select">
+            <option value="">All patients</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="btn-process" onclick="startProcessing()">
+          ▶ Run Pipeline
+        </button>
+        <button class="btn btn-secondary" id="btn-clear" onclick="clearTerminal()">
+          ⌫ Clear
+        </button>
+      </div>
+    </div>
+
+    <div class="terminal" id="terminal">
+      <div class="terminal-placeholder">
+        <span class="big">⬛</span>
+        <span>Pipeline logs will appear here</span>
+        <span style="color:#1e3a4a">Select patients → Run Pipeline</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Query + results -->
+  <div class="panel">
+    <div class="panel-header">🔍 Query</div>
+    <div class="panel-body">
+      <div class="query-section">
+        <div>
+          <div class="field-label">Patient ID</div>
+          <input class="input-field" id="query-patient" placeholder="e.g. 001" />
+        </div>
+        <div>
+          <div class="field-label">Question</div>
+          <textarea class="input-field" id="query-question" 
+            placeholder="What is the diagnosis for this patient?"></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" id="btn-query" onclick="runQuery()">
+          Ask ↵
+        </button>
+
+        <div>
+          <div class="field-label">Answer</div>
+          <div class="answer-box" id="answer-box">
+            Ask a question about your patient data...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = '';
+
+// ── Toast ──────────────────────────────────────────────
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = '', 2800);
+}
+
+// ── Status ─────────────────────────────────────────────
+function setStatus(msg, active = false) {
+  document.getElementById('status-text').textContent = msg;
+  document.querySelector('.dot').style.background = active ? 'var(--warn)' : 'var(--ok)';
+}
+
+// ── Load Patients ──────────────────────────────────────
+async function loadPatients() {
+  try {
+    const res = await fetch(`${API}/api/pdfs`);
+    const data = await res.json();
+    renderPatients(data.patients || {});
+    populateProcessSelect(data.patients || {});
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function renderPatients(patients) {
+  const el = document.getElementById('patient-list');
+  const count = Object.keys(patients).length;
+  document.getElementById('patient-count').textContent = count;
+
+  if (count === 0) {
+    el.innerHTML = '<div class="empty-state">No PDFs found.<br>Upload files above.</div>';
+    return;
+  }
+
+  el.innerHTML = Object.entries(patients).map(([pid, files]) => `
+    <div class="patient-item" onclick="selectPatient('${pid}')">
+      <div class="patient-id">patient_${pid}</div>
+      <div class="patient-files">${files.length} file${files.length > 1 ? 's' : ''}: ${files.join(', ')}</div>
+    </div>
+  `).join('');
+}
+
+function populateProcessSelect(patients) {
+  const sel = document.getElementById('process-select');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All patients</option>';
+  Object.keys(patients).forEach(pid => {
+    sel.innerHTML += `<option value="${pid}" ${cur === pid ? 'selected' : ''}>patient_${pid}</option>`;
+  });
+}
+
+function selectPatient(pid) {
+  document.querySelectorAll('.patient-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('query-patient').value = pid;
+  document.getElementById('process-select').value = pid;
+}
+
+// ── Load FHIR outputs ──────────────────────────────────
+async function loadFhirOutputs() {
+  try {
+    const res = await fetch(`${API}/api/fhir_outputs`);
+    const data = await res.json();
+    const el = document.getElementById('fhir-list');
+    if (!data.outputs.length) {
+      el.innerHTML = '<div class="empty-state" style="padding:12px 0">No outputs yet.</div>';
+      return;
+    }
+    el.innerHTML = data.outputs.map(o => `
+      <div class="fhir-item">
+        <span class="pid">patient_${o.patient_id}</span>
+        <a href="${API}/api/fhir/${o.patient_id}" target="_blank">view JSON ↗</a>
+      </div>
+    `).join('');
+  } catch (e) { console.error(e); }
+}
+
+// ── Upload ─────────────────────────────────────────────
+const uploadZone = document.getElementById('upload-zone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  handleUpload(e.dataTransfer.files);
+});
+document.getElementById('file-input').addEventListener('change', e => handleUpload(e.target.files));
+
+async function handleUpload(files) {
+  if (!files.length) return;
+  const form = new FormData();
+  for (const f of files) form.append('files', f);
+
+  setStatus('uploading…', true);
+  try {
+    const res = await fetch(`${API}/api/upload`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.uploaded.length) {
+      toast(`Uploaded: ${data.uploaded.join(', ')}`, 'ok');
+      await loadPatients();
+    }
+    if (data.errors.length) toast(data.errors.join('\n'), 'err');
+  } catch (e) {
+    toast('Upload failed: ' + e.message, 'err');
+  }
+  setStatus('ready');
+}
+
+// ── Terminal ───────────────────────────────────────────
+function clearTerminal() {
+  const t = document.getElementById('terminal');
+  t.innerHTML = `<div class="terminal-placeholder">
+    <span class="big">⬛</span>
+    <span>Pipeline logs will appear here</span>
+  </div>`;
+}
+
+function appendLog(line) {
+  const t = document.getElementById('terminal');
+  // Remove placeholder if present
+  const placeholder = t.querySelector('.terminal-placeholder');
+  if (placeholder) placeholder.remove();
+
+  const span = document.createElement('span');
+  span.className = 'log-line ' + classifyLog(line);
+  span.textContent = line;
+  t.appendChild(span);
+  t.scrollTop = t.scrollHeight;
+}
+
+function classifyLog(line) {
+  if (line.startsWith('[INFO]'))  return 'info';
+  if (line.startsWith('[DEBUG]')) return 'debug';
+  if (line.startsWith('[WARN]'))  return 'warn';
+  if (line.startsWith('[ERROR]') || line.startsWith('[FATAL]')) return 'error';
+  if (line.startsWith('[DONE]'))  return 'done';
+  if (line.startsWith('===') || line.startsWith('---') || line.match(/^={3,}/)) return 'sep';
+  if (line.startsWith('ALL PATIENTS') || line.startsWith('PROCESSING')) return 'ok';
+  return '';
+}
+
+// ── Process ────────────────────────────────────────────
+let currentSource = null;
+
+async function startProcessing() {
+  const patientId = document.getElementById('process-select').value || null;
+  const btn = document.getElementById('btn-process');
+
+  if (currentSource) {
+    currentSource.close();
+    currentSource = null;
+    btn.textContent = '▶ Run Pipeline';
+    setStatus('ready');
+    return;
+  }
+
+  btn.innerHTML = '<span class="spinner"></span> Running…';
+  btn.disabled = false;
+  setStatus('processing…', true);
+
+  clearTerminal();
+
+  try {
+    const res = await fetch(`${API}/api/process`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patient_id: patientId })
+    });
+    const { job_id } = await res.json();
+
+    const es = new EventSource(`${API}/api/logs/${job_id}`);
+    currentSource = es;
+
+    es.onmessage = (e) => {
+      if (e.data === '[DONE]') {
+        es.close();
+        currentSource = null;
+        btn.textContent = '▶ Run Pipeline';
+        setStatus('ready');
+        toast('Pipeline complete!', 'ok');
+        loadFhirOutputs();
+        loadPatients();
+        return;
+      }
+      if (e.data.trim()) appendLog(e.data);
+    };
+
+    es.onerror = () => {
+      es.close();
+      currentSource = null;
+      btn.textContent = '▶ Run Pipeline';
+      setStatus('error', false);
+      appendLog('[ERROR] Stream disconnected.');
+    };
+
+  } catch (err) {
+    toast('Failed to start: ' + err.message, 'err');
+    btn.textContent = '▶ Run Pipeline';
+    setStatus('error');
+  }
+}
+
+// ── Query ──────────────────────────────────────────────
+async function runQuery() {
+  const pid = document.getElementById('query-patient').value.trim();
+  const q = document.getElementById('query-question').value.trim();
+  const box = document.getElementById('answer-box');
+  const btn = document.getElementById('btn-query');
+
+  if (!pid || !q) { toast('Patient ID and question required', 'err'); return; }
+
+  box.className = 'answer-box loading';
+  box.textContent = 'Thinking…';
+  btn.disabled = true;
+  setStatus('querying…', true);
+
+  try {
+    const res = await fetch(`${API}/api/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patient_id: pid, question: q })
+    });
+    const data = await res.json();
+    box.className = 'answer-box';
+    box.textContent = data.answer || data.error || 'No answer returned.';
+    if (data.error) box.style.color = 'var(--err)';
+    else box.style.color = '';
+  } catch (e) {
+    box.className = 'answer-box';
+    box.textContent = 'Request failed: ' + e.message;
+    box.style.color = 'var(--err)';
+  }
+
+  btn.disabled = false;
+  setStatus('ready');
+}
+
+// ── Enter key on question textarea ────────────────────
+document.getElementById('query-question').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runQuery();
+});
+
+// ── Init ──────────────────────────────────────────────
+loadPatients();
+loadFhirOutputs();
+setInterval(() => { loadPatients(); loadFhirOutputs(); }, 10000);
+</script>
+</body>
+</html>
