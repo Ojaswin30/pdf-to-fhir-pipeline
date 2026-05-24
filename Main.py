@@ -314,8 +314,9 @@ llm = Together(
     together_api_key=TOGETHER_API_KEY
 )
 
-# Determine whether to use remote LLMs or fall back to local, deterministic logic
-USE_LLM = bool(TOGETHER_API_KEY and Together)
+# Determine whether to use remote LLMs or fall back to local, deterministic logic.
+# Default is local-only for an evergreen/free deployment; enable remote LLMs explicitly.
+USE_LLM = os.getenv("USE_REMOTE_LLM", "false").lower() == "true" and bool(TOGETHER_API_KEY and Together)
 
 def local_summarize(texts: list, question: str = "") -> str:
     """Simple local summarizer fallback: join first few chunks and return trimmed text."""
@@ -352,56 +353,6 @@ def local_extract_triples_text(text: str) -> str:
         return ""
     return "\n".join(triples)
 
-# ---------- Local LLM support (llama_cpp or gpt4all) ----------
-USE_LOCAL_LLM = False
-local_llm_model = None
-
-def try_load_local_llm():
-    global USE_LOCAL_LLM, local_llm_model
-    # Try llama_cpp first
-    try:
-        from llama_cpp import Llama
-        model_path = os.getenv("LLAMA_CPP_MODEL_PATH", "./models/llama.bin")
-        if os.path.exists(model_path):
-            local_llm_model = Llama(model_path=model_path, n_ctx=2048)
-            USE_LOCAL_LLM = True
-            print(f"[INFO] Loaded local Llama model from {model_path}")
-            return
-    except Exception:
-        pass
-
-    # Try gpt4all
-    try:
-        from gpt4all import GPT4All
-        model_name = os.getenv("GPT4ALL_MODEL", "gpt4all-lora-quantized.bin")
-        local_llm_model = GPT4All(model_name)
-        USE_LOCAL_LLM = True
-        print(f"[INFO] Loaded local GPT4All model: {model_name}")
-        return
-    except Exception:
-        pass
-
-try_load_local_llm()
-
-def local_llm_call(prompt: str, max_tokens: int = 256, temperature: float = 0.3) -> dict:
-    """Generate text using a locally-available LLM (returns dict with 'text')."""
-    if not USE_LOCAL_LLM or local_llm_model is None:
-        return {"text": ""}
-
-    try:
-        if local_llm_model.__class__.__name__.lower().startswith("llama"):
-            # llama_cpp Llama
-            out = local_llm_model(prompt=prompt, max_tokens=max_tokens, temperature=temperature)
-            text = out["choices"][0]["text"] if isinstance(out, dict) and "choices" in out else str(out)
-            return {"text": text}
-        else:
-            # gpt4all
-            text = local_llm_model.generate(prompt)
-            return {"text": text}
-    except Exception as e:
-        print(f"[WARN] Local LLM generation failed: {e}")
-        return {"text": ""}
-
 # ---------- Neo4j ----------
 class GraphInterface:
     def __init__(self, uri, user, password):
@@ -425,8 +376,17 @@ class VectorStore:
 
     def _load_or_create(self):
         if os.path.exists(self.index_path):
-            with open(self.index_path, "rb") as f:
-                return pickle.load(f)
+            try:
+                with open(self.index_path, "rb") as f:
+                    return pickle.load(f)
+            except Exception as e:
+                print(f"[WARN] Failed to load existing vector store {self.index_path}: {e}")
+                try:
+                    os.remove(self.index_path)
+                    print(f"[INFO] Removed stale vector store {self.index_path}; it will be recreated.")
+                except Exception as remove_error:
+                    print(f"[WARN] Could not remove stale vector store {self.index_path}: {remove_error}")
+                return None
         else:
             return None
 
@@ -545,13 +505,6 @@ def extract_triples_and_populate_kg(docs: List[Document], graph: GraphInterface)
                     response = safe_llm_call(extraction_chain.invoke, {"text": text})
                     response_text = response.get("text", "") if isinstance(response, dict) else str(response)
                     print(f"[INFO] Extracted Triples (LLM):\n{response_text}")
-                    triples = parse_triples({"text": response_text})
-                elif USE_LOCAL_LLM:
-                    # Use local LLM to run the extraction prompt
-                    prompt_text = extraction_prompt.format(text=text)
-                    response = local_llm_call(prompt_text, max_tokens=512)
-                    response_text = response.get("text", "")
-                    print(f"[INFO] Extracted Triples (local LLM):\n{response_text}")
                     triples = parse_triples({"text": response_text})
                 else:
                     # Local extraction fallback (no LLM / API key)
@@ -787,10 +740,6 @@ class GraphRAG:
                     "vector_results": "\n".join(vector_texts)
                 })
                 return summary_result.get("text", "Summary generation failed.")
-            elif USE_LOCAL_LLM:
-                prompt_text = answer_prompt.format(question=question, graph_results="[]", vector_results="\n".join(vector_texts))
-                response = local_llm_call(prompt_text, max_tokens=512)
-                return response.get("text", "") or local_summarize(vector_texts, question)
             else:
                 # Local summarizer fallback
                 return local_summarize(vector_texts, question)
@@ -803,11 +752,6 @@ class GraphRAG:
         if 'cypher_chain' in globals() and cypher_chain is not None and USE_LLM:
             result = safe_llm_call(cypher_chain.invoke, {"question": parsed_input.question})
             cypher_query = result.get("text", "").strip()
-        elif USE_LOCAL_LLM:
-            # create a simple cypher prompt and ask the local LLM
-            prompt_text = cypher_prompt.format(question=parsed_input.question)
-            response = local_llm_call(prompt_text, max_tokens=256)
-            cypher_query = response.get("text", "").strip() or "MATCH (n) RETURN n LIMIT 10"
         else:
             cypher_query = "MATCH (n) RETURN n LIMIT 10"
 
