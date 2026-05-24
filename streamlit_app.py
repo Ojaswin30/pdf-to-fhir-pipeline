@@ -7,14 +7,31 @@ import tempfile
 
 st.set_page_config(page_title="PDF → FHIR Explorer", layout="wide")
 
+current_nav = st.query_params.get("nav", "home")
+if isinstance(current_nav, list):
+    current_nav = current_nav[0] if current_nav else "home"
+nav = str(current_nav).lower()
+if nav not in {"home", "records"}:
+    nav = "home"
+
+with st.sidebar:
+    st.page_link("https://ojaswin30.github.io/", label="Back", icon="⬅️")
+
+    st.markdown("### Navigation")
+
+    if st.button("Home", use_container_width=True):
+        st.query_params["nav"] = "home"
+        st.rerun()
+
+    if st.button("Records", use_container_width=True):
+        st.query_params["nav"] = "records"
+        st.rerun()
+
 st.title("PDF → FHIR Explorer")
 
 fhir_files = sorted(glob.glob(os.path.join("fhir", "combined_*.json")))
 
-# Sidebar navigation
-nav = st.sidebar.radio("Navigation", ["Home", "Records"], index=0)
-
-if nav == "Home":
+if nav == "home":
     st.header("Upload & Process PDF")
     st.write("Upload a PDF and choose whether to only extract text or run the full pipeline.")
 
@@ -62,7 +79,7 @@ if nav == "Home":
         except Exception as e:
             st.error(f"Could not run extraction/pipeline utilities: {e}")
 
-elif nav == "Records":
+elif nav == "records":
     st.header("FHIR Records")
     if not fhir_files:
         st.warning("No FHIR JSON files found in the `fhir/` folder.")
