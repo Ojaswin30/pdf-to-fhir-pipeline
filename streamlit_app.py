@@ -15,7 +15,7 @@ if nav not in {"home", "records"}:
     nav = "home"
 
 with st.sidebar:
-    st.page_link("https://ojaswin30.github.io/", label="Back", icon="⬅️")
+    st.page_link("https://ojaswin30.github.io/", label="← Back")
 
     st.markdown("### Navigation")
 
