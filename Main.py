@@ -7,13 +7,75 @@ import tempfile
 import glob
 import re
 from typing import List, Any, Dict
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-from langchain_together import Together
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.docstore.document import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+import importlib
+import sys
+
+# Robust dynamic imports to handle differing langchain installs
+def import_attr(attr_name: str, candidates: list):
+    """Try to import `attr_name` from a list of module paths in order."""
+    for mod_path in candidates:
+        try:
+            module = importlib.import_module(mod_path)
+            if hasattr(module, attr_name):
+                return getattr(module, attr_name)
+        except Exception:
+            continue
+    return None
+
+# Try common locations for these symbols (fallbacks ordered by preference)
+LLMChain = import_attr("LLMChain", [
+    "langchain.chains",
+    "langchain.chains.llm",
+    "langchain_classic.chains.llm",
+])
+
+PromptTemplate = import_attr("PromptTemplate", [
+    "langchain.prompts",
+    "langchain.prompts.prompt",
+    "langchain_core.prompts",
+])
+
+# langchain_together/Together
+try:
+    Together = importlib.import_module("langchain_together").Together
+except Exception:
+    Together = None
+
+# FAISS vectorstore from community package
+FAISS = import_attr("FAISS", [
+    "langchain_community.vectorstores",
+    "langchain_community.vectorstores.faiss",
+])
+
+# HuggingFace embeddings
+HuggingFaceEmbeddings = import_attr("HuggingFaceEmbeddings", [
+    "langchain_huggingface",
+    "langchain_huggingface.huggingface",
+])
+
+# Document and text splitter
+Document = import_attr("Document", [
+    "langchain.docstore.document",
+    "langchain.schema.document",
+])
+
+RecursiveCharacterTextSplitter = import_attr("RecursiveCharacterTextSplitter", [
+    "langchain.text_splitter",
+    "langchain.text_splitter.recursive",
+    "langchain.text_splitter.text_splitter",
+])
+
+# Additional fallbacks for the text splitter package
+if RecursiveCharacterTextSplitter is None:
+    try:
+        from langchain_text_splitters.character import RecursiveCharacterTextSplitter as _RCTS
+        RecursiveCharacterTextSplitter = _RCTS
+    except Exception:
+        try:
+            from langchain_classic.text_splitter import RecursiveCharacterTextSplitter as _RCTS2
+            RecursiveCharacterTextSplitter = _RCTS2
+        except Exception:
+            RecursiveCharacterTextSplitter = None
 from pydantic import BaseModel, Field
 from neo4j import GraphDatabase
 from tenacity import retry, wait_fixed, stop_after_attempt, retry_if_exception_type
@@ -252,6 +314,94 @@ llm = Together(
     together_api_key=TOGETHER_API_KEY
 )
 
+# Determine whether to use remote LLMs or fall back to local, deterministic logic
+USE_LLM = bool(TOGETHER_API_KEY and Together)
+
+def local_summarize(texts: list, question: str = "") -> str:
+    """Simple local summarizer fallback: join first few chunks and return trimmed text."""
+    if not texts:
+        return "No text available for summary."
+    joined = "\n\n".join(texts[:3])
+    snippet = joined[:1500]
+    return f"[Local summary]\n{snippet}\n\n(Truncated - enable an LLM for richer summaries)"
+
+def local_extract_triples_text(text: str) -> str:
+    """Extract basic triples from structured fields like Diagnosis / Recommendations."""
+    triples = []
+    info = extract_patient_info(text)
+    patient = info.get("name", "Patient") or "Patient"
+    if info.get("diagnosis"):
+        triples.append(f"({patient}) -[HAS_DIAGNOSIS]-> ({info['diagnosis']})")
+    if info.get("history"):
+        triples.append(f"({patient}) -[HAS_HISTORY]-> ({info['history']})")
+    if info.get("recommendations"):
+        triples.append(f"({patient}) -[HAS_RECOMMENDATION]-> ({info['recommendations']})")
+    if info.get("physical_exam"):
+        triples.append(f"({patient}) -[HAS_PHYSICAL_EXAM]-> ({info['physical_exam']})")
+
+    # As a fallback, try to find simple "A: B" lines
+    for line in text.splitlines():
+        if ":" in line:
+            key, val = line.split(":", 1)
+            key = key.strip()
+            val = val.strip()
+            if key and val and len(val) < 200:
+                triples.append(f"({patient}) -[{key.upper().replace(' ', '_')}]-> ({val})")
+
+    if not triples:
+        return ""
+    return "\n".join(triples)
+
+# ---------- Local LLM support (llama_cpp or gpt4all) ----------
+USE_LOCAL_LLM = False
+local_llm_model = None
+
+def try_load_local_llm():
+    global USE_LOCAL_LLM, local_llm_model
+    # Try llama_cpp first
+    try:
+        from llama_cpp import Llama
+        model_path = os.getenv("LLAMA_CPP_MODEL_PATH", "./models/llama.bin")
+        if os.path.exists(model_path):
+            local_llm_model = Llama(model_path=model_path, n_ctx=2048)
+            USE_LOCAL_LLM = True
+            print(f"[INFO] Loaded local Llama model from {model_path}")
+            return
+    except Exception:
+        pass
+
+    # Try gpt4all
+    try:
+        from gpt4all import GPT4All
+        model_name = os.getenv("GPT4ALL_MODEL", "gpt4all-lora-quantized.bin")
+        local_llm_model = GPT4All(model_name)
+        USE_LOCAL_LLM = True
+        print(f"[INFO] Loaded local GPT4All model: {model_name}")
+        return
+    except Exception:
+        pass
+
+try_load_local_llm()
+
+def local_llm_call(prompt: str, max_tokens: int = 256, temperature: float = 0.3) -> dict:
+    """Generate text using a locally-available LLM (returns dict with 'text')."""
+    if not USE_LOCAL_LLM or local_llm_model is None:
+        return {"text": ""}
+
+    try:
+        if local_llm_model.__class__.__name__.lower().startswith("llama"):
+            # llama_cpp Llama
+            out = local_llm_model(prompt=prompt, max_tokens=max_tokens, temperature=temperature)
+            text = out["choices"][0]["text"] if isinstance(out, dict) and "choices" in out else str(out)
+            return {"text": text}
+        else:
+            # gpt4all
+            text = local_llm_model.generate(prompt)
+            return {"text": text}
+    except Exception as e:
+        print(f"[WARN] Local LLM generation failed: {e}")
+        return {"text": ""}
+
 # ---------- Neo4j ----------
 class GraphInterface:
     def __init__(self, uri, user, password):
@@ -391,13 +541,40 @@ def extract_triples_and_populate_kg(docs: List[Document], graph: GraphInterface)
 
             print(f"[INFO] Processing chunk {i+1}/{len(docs)}")
             try:
-                response = safe_llm_call(extraction_chain.invoke, {"text": text})
-                print(f"[INFO] Extracted Triples:\n{response}")
-            except Exception as e:
-                print(f"[ERROR] Skipping chunk {i+1} due to LLM failure: {e}")
+                if 'extraction_chain' in globals() and extraction_chain is not None and USE_LLM:
+                    response = safe_llm_call(extraction_chain.invoke, {"text": text})
+                    response_text = response.get("text", "") if isinstance(response, dict) else str(response)
+                    print(f"[INFO] Extracted Triples (LLM):\n{response_text}")
+                    triples = parse_triples({"text": response_text})
+                elif USE_LOCAL_LLM:
+                    # Use local LLM to run the extraction prompt
+                    prompt_text = extraction_prompt.format(text=text)
+                    response = local_llm_call(prompt_text, max_tokens=512)
+                    response_text = response.get("text", "")
+                    print(f"[INFO] Extracted Triples (local LLM):\n{response_text}")
+                    triples = parse_triples({"text": response_text})
+                else:
+                    # Local extraction fallback (no LLM / API key)
+                    response_text = local_extract_triples_text(text)
+                    print(f"[INFO] Extracted Triples (local):\n{response_text}")
+                    triples = []
+                    if response_text:
+                        for line in response_text.splitlines():
+                            if ")-[" in line and "]->(" in line:
+                                try:
+                                    subj, rest = line.split(")-[")
+                                    rel, obj = rest.split("]->(")
+                                    subj = subj.strip("() ")
+                                    rel = rel.strip("() ")
+                                    obj = obj.strip("() ")
+                                    triples.append((subj, rel, obj))
+                                except Exception as e:
+                                    print(f"[WARN] Skipping malformed local triple: {line} ({e})")
+                    else:
+                        print(f"[WARN] No triples extracted for chunk {i+1}")
+            except Exception as outer_e:
+                print(f"[ERROR] Skipping chunk {i+1} due to extraction failure: {outer_e}")
                 continue
-
-            triples = parse_triples(response)
             for subj, rel, obj in triples:
                 cypher = f"""
                 MERGE (a:Entity {{name: \"{subj}\"}})
@@ -468,14 +645,16 @@ def call_fhir_builder(patient_info, page_text):
         "condition": condition_fields
     }) + "\n" + page_text
 
-    command = [r".\fhir_env\Scripts\python.exe", "to_fhir.py"]
+    # Use the current Python interpreter to run the to_fhir script (works cross-platform)
+    command = [sys.executable, "to_fhir.py"]
 
     proc = subprocess.Popen(
         command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True
+        text=True,
+        cwd=os.path.dirname(os.path.abspath(__file__))
     )
 
     stdout, stderr = proc.communicate(input=input_data)
@@ -601,19 +780,36 @@ class GraphRAG:
         vector_texts = [doc.page_content for doc in sample_docs]
         
         try:
-            summary_result = safe_llm_call(answer_chain.invoke, {
-                "question": question,
-                "graph_results": "[]",
-                "vector_results": "\n".join(vector_texts)
-            })
-            return summary_result.get("text", "Summary generation failed.")
+            if 'answer_chain' in globals() and answer_chain is not None and USE_LLM:
+                summary_result = safe_llm_call(answer_chain.invoke, {
+                    "question": question,
+                    "graph_results": "[]",
+                    "vector_results": "\n".join(vector_texts)
+                })
+                return summary_result.get("text", "Summary generation failed.")
+            elif USE_LOCAL_LLM:
+                prompt_text = answer_prompt.format(question=question, graph_results="[]", vector_results="\n".join(vector_texts))
+                response = local_llm_call(prompt_text, max_tokens=512)
+                return response.get("text", "") or local_summarize(vector_texts, question)
+            else:
+                # Local summarizer fallback
+                return local_summarize(vector_texts, question)
         except Exception as e:
             return f"Summary generation error: {e}"
 
     def run(self, user_input: str) -> str:
         parsed_input = QueryInput(question=user_input)
-        result = safe_llm_call(cypher_chain.invoke, {"question": parsed_input.question})
-        cypher_query = result.get("text", "").strip()
+        # Generate cypher query (LLM if available, else simple fallback)
+        if 'cypher_chain' in globals() and cypher_chain is not None and USE_LLM:
+            result = safe_llm_call(cypher_chain.invoke, {"question": parsed_input.question})
+            cypher_query = result.get("text", "").strip()
+        elif USE_LOCAL_LLM:
+            # create a simple cypher prompt and ask the local LLM
+            prompt_text = cypher_prompt.format(question=parsed_input.question)
+            response = local_llm_call(prompt_text, max_tokens=256)
+            cypher_query = response.get("text", "").strip() or "MATCH (n) RETURN n LIMIT 10"
+        else:
+            cypher_query = "MATCH (n) RETURN n LIMIT 10"
 
         print(f"[DEBUG] Generated Cypher: {cypher_query}")
 
@@ -625,13 +821,17 @@ class GraphRAG:
         vector_results = self.vstore.search(parsed_input.question)
         vector_texts = [doc.page_content for doc in vector_results]
 
-        final_answer = safe_llm_call(answer_chain.invoke, {
-            "question": parsed_input.question,
-            "graph_results": str(graph_results),
-            "vector_results": "\n".join(vector_texts)
-        })
-
-        return final_answer.get("text", "Answer generation failed.")
+        if 'answer_chain' in globals() and answer_chain is not None and USE_LLM:
+            final_answer = safe_llm_call(answer_chain.invoke, {
+                "question": parsed_input.question,
+                "graph_results": str(graph_results),
+                "vector_results": "\n".join(vector_texts)
+            })
+            return final_answer.get("text", "Answer generation failed.")
+        else:
+            # Local deterministic answer combining simple graph info + vector text
+            combined = "\n\n".join(vector_texts[:3])
+            return f"[Local answer]\nQuestion: {parsed_input.question}\n\nGraph results: {graph_results}\n\nText snippets:\n{combined}"
 
 # ---------- Main (CLI mode) ----------
 if __name__ == "__main__":
