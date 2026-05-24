@@ -177,3 +177,50 @@ For questions, issues, or contributions:
 ## ⚠️ Disclaimer
 
 This tool is intended for educational and research purposes. Always ensure compliance with healthcare data privacy regulations (HIPAA, GDPR, etc.) when processing medical records.
+
+---
+
+## 🧠 Local LLM & Deployment (Optional — offline models)
+
+You can improve summaries, extraction, and Cypher generation by using a local LLM instead of remote API keys. The app will auto-detect a local model if available.
+
+1) Install the runtime you want to use:
+
+- For llama_cpp (recommended when you have a GGML model):
+
+```bash
+pip install llama-cpp-python
+# Place GGML model file (e.g. llama-2-7b.ggmlv3.q4_K_M.bin) somewhere accessible
+export LLAMA_CPP_MODEL_PATH=/absolute/path/to/your/model.bin
+```
+
+- For GPT4All:
+
+```bash
+pip install gpt4all
+export GPT4ALL_MODEL=gpt4all-model.bin
+```
+
+2) Ensure model file is present and environment variable is set. The app will prefer a local LLM when detected.
+
+3) Install system dependencies for OCR (Tesseract) and create venv as usual:
+
+```bash
+sudo apt-get install -y tesseract-ocr
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+4) Run Streamlit:
+
+```bash
+.venv/bin/python -m streamlit run streamlit_app.py
+# open http://localhost:8501
+```
+
+Notes:
+- Local models can be large — ensure you have disk space and memory.
+- Using a local model keeps your deployment free from external API costs and makes behavior deterministic and private.
+
+If you'd like, I can add a small helper script to download a recommended GGML model automatically (requires consent due to large downloads). Ask for `download-model` if you want that added.
